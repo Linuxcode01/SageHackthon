@@ -5,6 +5,51 @@
  *
  * The function analyzes student data and returns contextual insights.
  */
+import { isOllamaConfigured, sendPromptToOllama } from "../services/ollamaService";
+
+function stripCodeFences(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
+}
+
+function normalizeInsightItems(items, fallback) {
+  if (!Array.isArray(items)) return fallback;
+
+  const normalized = items
+    .filter(Boolean)
+    .map((item, index) => ({
+      id: item.id ?? index + 1,
+      type: ["success", "warning", "danger", "info"].includes(item.type) ? item.type : "info",
+      icon: item.icon || "💡",
+      title: String(item.title || `Insight ${index + 1}`),
+      text: String(item.text || ""),
+    }))
+    .filter((item) => item.text.trim());
+
+  return normalized.length ? normalized : fallback;
+}
+
+async function generateInsightsWithOllama({ role, data, prompt, fallback }) {
+  if (!isOllamaConfigured()) return fallback;
+
+  const requestPrompt = `${prompt}\n\nReturn ONLY valid JSON as an array of objects with keys: id, type, icon, title, text. Use double quotes and no markdown.`;
+
+  try {
+    const reply = await sendPromptToOllama(requestPrompt, {
+      history: [
+        { from: "user", text: JSON.stringify(data) },
+      ],
+    });
+
+    const parsed = JSON.parse(stripCodeFences(reply));
+    return normalizeInsightItems(parsed, fallback);
+  } catch (err) {
+    console.warn(`[generateInsights] Ollama ${role} insight generation failed`, err?.message);
+    return fallback;
+  }
+}
 
 /**
  * Generate AI insights for a teacher based on class data.
@@ -146,6 +191,24 @@ export function generateAdminInsights(data) {
       text: "Implement peer-mentoring programs and AI-assisted tutoring to improve bottom 20% student performance.",
     },
   ];
+}
+
+export async function generateTeacherInsightsFromOllama(data) {
+  const fallback = generateTeacherInsights(data);
+  const prompt = `You are EduInsight AI for a teacher dashboard. Analyze this class data and return concise, actionable insights: ${JSON.stringify(data)}`;
+  return generateInsightsWithOllama({ role: "teacher", data, prompt, fallback });
+}
+
+export async function generateStudentInsightsFromOllama(data) {
+  const fallback = generateStudentInsights(data);
+  const prompt = `You are EduInsight AI for a student dashboard. Analyze this student data and return concise, actionable insights: ${JSON.stringify(data)}`;
+  return generateInsightsWithOllama({ role: "student", data, prompt, fallback });
+}
+
+export async function generateAdminInsightsFromOllama(data) {
+  const fallback = generateAdminInsights(data);
+  const prompt = `You are EduInsight AI for an institutional admin dashboard. Analyze this institutional data and return concise, actionable insights: ${JSON.stringify(data)}`;
+  return generateInsightsWithOllama({ role: "admin", data, prompt, fallback });
 }
 
 /**

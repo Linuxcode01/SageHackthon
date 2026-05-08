@@ -2,10 +2,10 @@
  * TeacherStudents.jsx
  * Full student management table with search and filter.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Download, UserPlus } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
-import { STUDENTS } from "../../data/mockData";
+import { getAllStudents, createStudent } from "../../services/backendApi";
 
 const STATUS_BADGE = {
   Excellent: "badge-excellent", Good: "badge-good",
@@ -16,8 +16,12 @@ export default function TeacherStudents() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [sort, setSort]     = useState("name");
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: "", rollNumber: "", email: "", semester: 1, course: "B.Tech CSE", department: "Computer Science", gpa: 0, attendance: 0, totalMarks: 0, status: "Active" });
 
-  const filtered = STUDENTS
+  const filtered = students
     .filter((s) => {
       const q = search.toLowerCase();
       return (
@@ -32,8 +36,32 @@ export default function TeacherStudents() {
       return a.name.localeCompare(b.name);
     });
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await getAllStudents();
+        if (alive) setStudents(list.map((s) => ({
+          id: s._id,
+          name: s.name,
+          email: s.email,
+          roll: s.rollNumber,
+          marks: s.totalMarks || 0,
+          attendance: s.attendance || 0,
+          gpa: s.gpa || 0,
+          status: s.status || "Active",
+        })));
+      } catch (err) {
+        console.warn("[TeacherStudents] failed to load students", err);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   return (
-    <DashboardLayout title="Students" subtitle={`${STUDENTS.length} students enrolled`}>
+    <DashboardLayout title="Students" subtitle={`${students.length} students enrolled`}>
       <div className="space-y-4">
 
         {/* Controls */}
@@ -62,11 +90,56 @@ export default function TeacherStudents() {
             <button className="btn-outline text-xs px-3 py-2 gap-1.5">
               <Download size={14} /> Export
             </button>
-            <button className="btn-primary text-xs px-3 py-2 gap-1.5">
+            <button onClick={() => setShowAdd(true)} className="btn-primary text-xs px-3 py-2 gap-1.5">
               <UserPlus size={14} /> Add Student
             </button>
           </div>
         </div>
+
+        {/* Add Student Modal */}
+        {showAdd && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-lg w-full max-w-xl">
+              <h3 className="font-semibold mb-4">Add New Student</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <input placeholder="Full name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />
+                <input placeholder="Roll number" value={form.rollNumber} onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} className="input" />
+                <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
+                <input placeholder="Semester" type="number" value={form.semester} onChange={(e) => setForm({ ...form, semester: Number(e.target.value) })} className="input" />
+                <input placeholder="Course" value={form.course} onChange={(e) => setForm({ ...form, course: e.target.value })} className="input" />
+                <input placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="input" />
+                <input placeholder="GPA" type="number" value={form.gpa} onChange={(e) => setForm({ ...form, gpa: Number(e.target.value) })} className="input" />
+                <input placeholder="Attendance %" type="number" value={form.attendance} onChange={(e) => setForm({ ...form, attendance: Number(e.target.value) })} className="input" />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setShowAdd(false)} className="btn-outline">Cancel</button>
+                <button onClick={async () => {
+                  try {
+                    const payload = {
+                      name: form.name,
+                      rollNumber: form.rollNumber,
+                      email: form.email,
+                      semester: form.semester,
+                      course: form.course,
+                      department: form.department,
+                      gpa: form.gpa,
+                      attendance: form.attendance,
+                      totalMarks: form.totalMarks,
+                      status: form.status,
+                    };
+                    const created = await createStudent(payload);
+                    setStudents((s) => [{ id: created._id, name: created.name, email: created.email, roll: created.rollNumber, marks: created.totalMarks || 0, attendance: created.attendance || 0, gpa: created.gpa || 0, status: created.status || "Active" }, ...s]);
+                    setShowAdd(false);
+                    setForm({ name: "", rollNumber: "", email: "", semester: 1, course: "B.Tech CSE", department: "Computer Science", gpa: 0, attendance: 0, totalMarks: 0, status: "Active" });
+                  } catch (err) {
+                    console.error("Failed to create student:", err);
+                    alert("Failed to create student. See console for details.");
+                  }
+                }} className="btn-primary">Create Student</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="card p-5 overflow-x-auto">
@@ -119,7 +192,7 @@ export default function TeacherStudents() {
           {filtered.length === 0 && (
             <div className="text-center py-10 text-slate-400">No students found.</div>
           )}
-          <p className="text-xs text-slate-400 mt-3">Showing {filtered.length} of {STUDENTS.length} students</p>
+          <p className="text-xs text-slate-400 mt-3">Showing {filtered.length} of {students.length} students</p>
         </div>
 
       </div>

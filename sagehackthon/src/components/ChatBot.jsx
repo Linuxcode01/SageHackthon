@@ -1,8 +1,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Sparkles, Zap, AlertCircle, Workflow } from "lucide-react";
-import { sendMessageToN8n, isN8nConfigured }       from "../services/n8nService";
-import { sendMessageToGemini, isGeminiConfigured } from "../services/geminiService";
+import { Send, Bot, User, Sparkles, AlertCircle } from "lucide-react";
+import { OLLAMA_MODEL, sendMessageToOllama, isOllamaConfigured } from "../services/ollamaService";
 import { getChatbotResponse }                       from "../utils/generateInsights";
 
 // ── Quick prompt chips per role ───────────────────────────────
@@ -34,44 +33,34 @@ const ROLE_LABELS = {
 };
 
 const ENGINE_CONFIG = {
-  n8n:    { label: "n8n Automation", Icon: Workflow, badge: "bg-white/20 text-white",         dot: "bg-emerald-400 animate-pulse", status: "Online"  },
-  gemini: { label: "Gemini AI",      Icon: Zap,      badge: "bg-white/20 text-white",         dot: "bg-emerald-400 animate-pulse", status: "Online"  },
+  ollama: { label: "Ollama",         Icon: Bot,      badge: "bg-white/20 text-white",         dot: "bg-emerald-400 animate-pulse", status: "Online"  },
   local:  { label: "Local AI",       Icon: Bot,      badge: "bg-amber-400/30 text-amber-200", dot: "bg-amber-400",                 status: "Offline" },
 };
 
 // ── Determine active engine once (outside component) ─────────
 function getEngine() {
-  if (isN8nConfigured())    return "n8n";
-  if (isGeminiConfigured()) return "gemini";
+  if (isOllamaConfigured()) return "ollama";
   return "local";
 }
 
 // ── Welcome message per engine ────────────────────────────────
 function buildWelcome(engine, role) {
   const hi = role === "student" ? "Hi Rahul" : "Hi";
-  if (engine === "n8n") {
-    return `👋 ${hi}! I'm your **${ROLE_LABELS[role]}**, connected to your n8n automation.\n\nI have full context of your ${role === "admin" ? "institution's" : role === "teacher" ? "class'" : "academic"} data. Ask me anything!`;
-  }
-  if (engine === "gemini") {
-    return `👋 ${hi}! I'm your **${ROLE_LABELS[role]}**, powered by Google Gemini AI.\n\nAsk me anything about ${role === "admin" ? "your institution" : role === "teacher" ? "your students" : "your performance"}!`;
+  if (engine === "ollama") {
+    return `👋 ${hi}! I'm your **${ROLE_LABELS[role]}**, running on your local Ollama model (${OLLAMA_MODEL}).\n\nEverything stays on your machine — no cloud, no API keys needed!`;
   }
   return getChatbotResponse("", role);
 }
 
 // ── Error message helper ──────────────────────────────────────
 function buildError(err, engine) {
-  // Show the specific n8n error codes from n8nService.js
-  if (err.message === "NO_WEBHOOK_URL")          return "⚙️ n8n webhook URL not set in .env file.";
-  if (err.message === "NO_API_KEY")              return "⚙️ Gemini API key not set in .env file.";
-  if (err.message?.startsWith("N8N_404"))        return "❌ n8n webhook not found (404). Make sure your workflow is ACTIVATED in n8n (toggle top-right → blue).";
-  if (err.message?.startsWith("N8N_500"))        return "❌ n8n workflow error (500). Check your n8n execution logs for details.";
-  if (err.message?.startsWith("N8N_403"))        return "❌ n8n access denied (403). Check your webhook URL.";
-  if (err.message?.startsWith("N8N_TIMEOUT"))    return "⏱️ n8n request timed out. Check your internet connection.";
-  if (err.message?.startsWith("N8N_EMPTY"))      return `❌ ${err.message.replace("N8N_EMPTY: ", "")}`;
+  if (err.message === "NO_OLLAMA_URL")          return "⚙️ Ollama URL not set in .env file (VITE_OLLAMA_URL).";
+  if (err.message?.startsWith("OLLAMA_TIMEOUT")) return "⏱️ Ollama is taking too long. DeepSeek may still be loading; try again or increase VITE_OLLAMA_TIMEOUT_MS.";
+  if (err.message?.startsWith("OLLAMA_EMPTY"))   return "❌ Ollama responded but no text was found in the response.";
   if (err.response?.status === 429)              return "⏱️ Rate limit reached. Please wait a moment and try again.";
   if (err.code === "ERR_NETWORK")                return "🌐 Network error. Check your internet connection.";
   // Show raw error message so we can debug unknown errors
-  return `⚠️ ${engine === "n8n" ? "n8n" : "AI"} error: ${err.message || "Unknown error"} — using local fallback.`;
+  return `⚠️ Ollama error: ${err.message || "Unknown error"} — using local fallback.`;
 }
 
 // ── Timestamp helper ──────────────────────────────────────────
@@ -91,8 +80,7 @@ export default function ChatBot({ role = "teacher" }) {
   const [messages, setMessages] = useState([
     { id: 1, from: "bot", text: buildWelcome(engine, role), time: getTime(), engine },
   ]);
-  const [n8nHistory,    setN8nHistory]    = useState([]); // n8n conversation history
-  const [geminiHistory, setGeminiHistory] = useState([]); // Gemini multi-turn history
+  const [ollamaHistory, setOllamaHistory]  = useState([]); // Ollama multi-turn history
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
@@ -127,48 +115,30 @@ export default function ChatBot({ role = "teacher" }) {
 
     setLoading(true);
 
-    // ── TIER 1: n8n Webhook ──────────────────────────────
-    if (isN8nConfigured()) {
+    // ── TIER 1: Ollama (only active backend) ─────────────
+    if (isOllamaConfigured()) {
       try {
-        const reply = await sendMessageToN8n(msg, role, n8nHistory);
-        setN8nHistory((prev) => [
+        const reply = await sendMessageToOllama(msg, role, ollamaHistory);
+        setOllamaHistory((prev) => [
           ...prev,
-          { from: "user", text: msg   },
+          { from: "user", text: msg },
           { from: "bot",  text: reply },
         ].slice(-12));
-        addBotMessage(reply, "n8n");
+        addBotMessage(reply, "ollama");
         setLoading(false);
         return;
       } catch (err) {
-        setError(buildError(err, "n8n"));
-        // fall through to next tier
+        setError(buildError(err, "ollama"));
+        // fall through to local fallback
       }
     }
 
-    // ── TIER 2: Gemini ───────────────────────────────────
-    if (isGeminiConfigured()) {
-      try {
-        const reply = await sendMessageToGemini(msg, role, geminiHistory);
-        setGeminiHistory((prev) => [
-          ...prev,
-          { role: "user",  parts: [{ text: msg   }] },
-          { role: "model", parts: [{ text: reply  }] },
-        ]);
-        addBotMessage(reply, "gemini");
-        setLoading(false);
-        return;
-      } catch (err) {
-        setError(buildError(err, "gemini"));
-        // fall through to local
-      }
-    }
-
-    // ── TIER 3: Local keyword matching ───────────────────
+    // ── Local keyword matching fallback ──────────────────
     await new Promise((r) => setTimeout(r, 600));
     addBotMessage(getChatbotResponse(msg, role), "local");
     setLoading(false);
 
-  }, [input, loading, role, n8nHistory, geminiHistory, addBotMessage]);
+  }, [input, loading, role, ollamaHistory, addBotMessage]);
 
   // ── Render ────────────────────────────────────────────────
   return (
@@ -198,13 +168,11 @@ export default function ChatBot({ role = "teacher" }) {
       </div>
 
       {/* ── Warning banner (no AI connected) ── */}
-      {engine === "local" && (
+      {engine === "ollama" && (
         <div className="px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 flex items-start gap-2">
           <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700 dark:text-amber-400">
-            <span className="font-semibold">No AI connected.</span> Add{" "}
-            <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono text-[11px]">VITE_N8N_WEBHOOK_URL</code>{" "}
-            to your <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono text-[11px]">.env</code> to enable n8n AI.
+            <span className="font-semibold">Ollama connected.</span> Model: <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono text-[11px]">{OLLAMA_MODEL}</code>
           </p>
         </div>
       )}
@@ -235,10 +203,13 @@ export default function ChatBot({ role = "teacher" }) {
                 <span className="text-[10px] text-slate-400">{m.time}</span>
                 {m.from === "bot" && m.engine && m.engine !== "local" && (
                   <span className="flex items-center gap-0.5 text-[10px] text-primary-400 font-medium">
-                    {m.engine === "n8n"
-                      ? <><Workflow size={9} /> n8n</>
-                      : <><Zap size={9} className="fill-primary-400" /> Gemini</>
-                    }
+                      {m.engine === "n8n" ? (
+                        <><Workflow size={9} /> n8n</>
+                      ) : m.engine === "gemini" ? (
+                        <><Zap size={9} className="fill-primary-400" /> Gemini</>
+                      ) : m.engine === "ollama" ? (
+                        <><Bot size={9} className="fill-primary-400" /> Ollama</>
+                      ) : null}
                   </span>
                 )}
               </div>
@@ -257,7 +228,7 @@ export default function ChatBot({ role = "teacher" }) {
               <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: "150ms" }} />
               <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: "300ms" }} />
               <span className="text-xs text-slate-400 ml-1">
-                {engine === "n8n" ? "n8n is processing..." : engine === "gemini" ? "Gemini is thinking..." : "Thinking..."}
+                {engine === "n8n" ? "n8n is processing..." : engine === "ollama" ? "Ollama is thinking..." : engine === "gemini" ? "Gemini is thinking..." : "Thinking..."}
               </span>
             </div>
           </div>

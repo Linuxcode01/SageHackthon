@@ -1,11 +1,12 @@
 /**
  * StudentInsights.jsx — AI insights and prediction for students.
  */
+import { useEffect, useState } from "react";
 import DashboardLayout from "../../components/DashboardLayout";
 import InsightCard from "../../components/InsightCard";
 import PredictionCard from "../../components/PredictionCard";
 import { STUDENT_SUBJECTS } from "../../data/mockData";
-import { generateStudentInsights } from "../../utils/generateInsights";
+import { generateStudentInsights, generateStudentInsightsFromOllama } from "../../utils/generateInsights";
 import { predictNextScores, getImprovementChance, getRiskLevel } from "../../utils/linearRegression";
 
 export default function StudentInsights() {
@@ -14,7 +15,22 @@ export default function StudentInsights() {
   const improvement     = getImprovementChance(historicalMarks);
   const { level: risk } = getRiskLevel(82, 88);
 
-  const insights = generateStudentInsights({ marks: 82, attendance: 88, gpa: 8.2, subjects: STUDENT_SUBJECTS });
+  const fallbackInsights = generateStudentInsights({ marks: 82, attendance: 88, gpa: 8.2, subjects: STUDENT_SUBJECTS });
+  const [insights, setInsights] = useState(fallbackInsights);
+
+  useEffect(() => {
+    let alive = true;
+    const data = { marks: 82, attendance: 88, gpa: 8.2, subjects: STUDENT_SUBJECTS };
+
+    (async () => {
+      const generated = await generateStudentInsightsFromOllama(data);
+      if (alive) setInsights(generated);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <DashboardLayout title="AI Insights" subtitle="Personalized AI analysis for you">

@@ -2,18 +2,34 @@
  * TeacherInsights.jsx
  * AI Insights + Prediction screen for teachers.
  */
+import { useEffect, useState } from "react";
 import DashboardLayout from "../../components/DashboardLayout";
 import InsightCard from "../../components/InsightCard";
 import PredictionCard from "../../components/PredictionCard";
 import { STUDENTS, SUBJECT_MARKS } from "../../data/mockData";
-import { generateTeacherInsights } from "../../utils/generateInsights";
+import { generateTeacherInsights, generateTeacherInsightsFromOllama } from "../../utils/generateInsights";
 import { predictNextScores, getImprovementChance, getRiskLevel } from "../../utils/linearRegression";
 
 export default function TeacherInsights() {
   const avgMarks      = Math.round(STUDENTS.reduce((a, s) => a + s.marks, 0) / STUDENTS.length);
   const avgAttendance = Math.round(STUDENTS.reduce((a, s) => a + s.attendance, 0) / STUDENTS.length);
   const weakCount     = STUDENTS.filter((s) => s.marks < 60 || s.attendance < 65).length;
-  const insights      = generateTeacherInsights({ avgMarks, attendance: avgAttendance, weakCount, totalStudents: STUDENTS.length });
+  const fallbackInsights = generateTeacherInsights({ avgMarks, attendance: avgAttendance, weakCount, totalStudents: STUDENTS.length });
+  const [insights, setInsights] = useState(fallbackInsights);
+
+  useEffect(() => {
+    let alive = true;
+    const data = { avgMarks, attendance: avgAttendance, weakCount, totalStudents: STUDENTS.length };
+
+    (async () => {
+      const generated = await generateTeacherInsightsFromOllama(data);
+      if (alive) setInsights(generated);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [avgMarks, avgAttendance, weakCount]);
 
   const historicalMarks = [68, 71, 69, 75, 78, 82];
   const [next1, next2]  = predictNextScores(historicalMarks, 2);

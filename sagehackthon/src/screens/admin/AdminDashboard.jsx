@@ -14,7 +14,7 @@ import InsightCard from "../../components/InsightCard";
 import NotificationPanel from "../../components/NotificationPanel";
 import SkeletonDashboard from "../../components/SkeletonLoader";
 import { DEPARTMENTS, STUDENT_GROWTH, PASS_FAIL, NOTIFICATIONS } from "../../data/mockData";
-import { generateAdminInsights } from "../../utils/generateInsights";
+import { generateAdminInsights, generateAdminInsightsFromOllama } from "../../utils/generateInsights";
 import { useAuth } from "../../context/AuthContext";
 
 export default function AdminDashboard() {
@@ -30,8 +30,22 @@ export default function AdminDashboard() {
   const totalTeachers = DEPARTMENTS.reduce((a, d) => a + d.teachers, 0);
   const avgPassRate   = Math.round(DEPARTMENTS.reduce((a, d) => a + d.passRate, 0) / DEPARTMENTS.length);
   const avgAttendance = Math.round(DEPARTMENTS.reduce((a, d) => a + d.attendance, 0) / DEPARTMENTS.length);
+  const fallbackInsights = generateAdminInsights({ departments: DEPARTMENTS, totalStudents, passRate: avgPassRate });
+  const [insights, setInsights] = useState(fallbackInsights);
 
-  const insights = generateAdminInsights({ departments: DEPARTMENTS, totalStudents, passRate: avgPassRate });
+  useEffect(() => {
+    let alive = true;
+    const data = { departments: DEPARTMENTS, totalStudents, passRate: avgPassRate };
+
+    (async () => {
+      const generated = await generateAdminInsightsFromOllama(data);
+      if (alive) setInsights(generated);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [totalStudents, avgPassRate]);
 
   if (loading) return <DashboardLayout title="Admin Dashboard"><SkeletonDashboard /></DashboardLayout>;
 

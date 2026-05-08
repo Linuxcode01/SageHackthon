@@ -5,6 +5,7 @@
  * Backend-ready: swap the mock login with a real API call.
  */
 import { createContext, useContext, useState, useEffect } from "react";
+import { getStudentByRoll } from "../services/backendApi.js";
 
 const AuthContext = createContext(null);
 
@@ -83,9 +84,30 @@ export function AuthProvider({ children }) {
     );
 
     if (!found) throw new Error("Invalid credentials. Please check your email, password, and role.");
-
     // eslint-disable-next-line no-unused-vars
     const { password: _pw, ...safeUser } = found;
+
+    // If student role, try to load the student's DB record by rollNumber
+    if (role === "student" && safeUser.rollNumber) {
+      try {
+        const studentFromDb = await getStudentByRoll(safeUser.rollNumber);
+        // Merge token and role into DB record for frontend usage
+        const merged = { ...studentFromDb, token: safeUser.token, role: safeUser.role };
+        setUser(merged);
+        setToken(safeUser.token);
+        localStorage.setItem("eduinsight_user", JSON.stringify(merged));
+        localStorage.setItem("eduinsight_token", safeUser.token);
+        return merged;
+      } catch (err) {
+        console.warn("[Auth] Failed to load student from DB, falling back to mock user:", err);
+        setUser(safeUser);
+        setToken(safeUser.token);
+        localStorage.setItem("eduinsight_user", JSON.stringify(safeUser));
+        localStorage.setItem("eduinsight_token", safeUser.token);
+        return safeUser;
+      }
+    }
+
     setUser(safeUser);
     setToken(safeUser.token);
     localStorage.setItem("eduinsight_user", JSON.stringify(safeUser));
@@ -118,9 +140,9 @@ export function AuthProvider({ children }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const useAuth = () => {
+// Use a function declaration for consistent HMR/fast-refresh behavior
+export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
-};
+}

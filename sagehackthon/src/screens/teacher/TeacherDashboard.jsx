@@ -18,7 +18,7 @@ import SkeletonDashboard from "../../components/SkeletonLoader";
 import {
   STUDENTS, MARKS_TREND, SUBJECT_MARKS, ATTENDANCE_PIE, NOTIFICATIONS,
 } from "../../data/mockData";
-import { generateTeacherInsights } from "../../utils/generateInsights";
+import { generateTeacherInsights, generateTeacherInsightsFromOllama } from "../../utils/generateInsights";
 import { predictNextScores, getImprovementChance, getRiskLevel } from "../../utils/linearRegression";
 import { useAuth } from "../../context/AuthContext";
 
@@ -46,9 +46,22 @@ export default function TeacherDashboard() {
   const avgMarks      = Math.round(STUDENTS.reduce((a, s) => a + s.marks, 0) / totalStudents);
   const avgAttendance = Math.round(STUDENTS.reduce((a, s) => a + s.attendance, 0) / totalStudents);
   const weakCount     = STUDENTS.filter((s) => s.marks < 60 || s.attendance < 65).length;
+  const fallbackInsights = generateTeacherInsights({ avgMarks, attendance: avgAttendance, weakCount, totalStudents });
+  const [insights, setInsights] = useState(fallbackInsights);
 
-  // AI insights
-  const insights = generateTeacherInsights({ avgMarks, attendance: avgAttendance, weakCount, totalStudents });
+  useEffect(() => {
+    let alive = true;
+    const data = { avgMarks, attendance: avgAttendance, weakCount, totalStudents };
+
+    (async () => {
+      const generated = await generateTeacherInsightsFromOllama(data);
+      if (alive) setInsights(generated);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [avgMarks, avgAttendance, weakCount, totalStudents]);
 
   // Prediction
   const historicalMarks = MARKS_TREND.filter((m) => m.avg !== null).map((m) => m.avg);

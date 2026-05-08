@@ -1,13 +1,29 @@
 /**
  * AdminInsights.jsx — AI insights for institutional admin.
  */
+import { useEffect, useState } from "react";
 import DashboardLayout from "../../components/DashboardLayout";
 import InsightCard from "../../components/InsightCard";
 import { DEPARTMENTS } from "../../data/mockData";
-import { generateAdminInsights } from "../../utils/generateInsights";
+import { generateAdminInsights, generateAdminInsightsFromOllama } from "../../utils/generateInsights";
 
 export default function AdminInsights() {
-  const insights = generateAdminInsights({ departments: DEPARTMENTS, totalStudents: 1500, passRate: 88 });
+  const fallbackInsights = generateAdminInsights({ departments: DEPARTMENTS, totalStudents: 1500, passRate: 88 });
+  const [insights, setInsights] = useState(fallbackInsights);
+
+  useEffect(() => {
+    let alive = true;
+    const data = { departments: DEPARTMENTS, totalStudents: 1500, passRate: 88 };
+
+    (async () => {
+      const generated = await generateAdminInsightsFromOllama(data);
+      if (alive) setInsights(generated);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <DashboardLayout title="AI Insights" subtitle="Institution-wide AI analysis">
