@@ -114,6 +114,11 @@ export default function TeacherStudents() {
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setShowAdd(false)} className="btn-outline">Cancel</button>
                 <button onClick={async () => {
+                  // Basic validation
+                  if (!form.name || !form.rollNumber || !form.email) {
+                    alert("Please provide Name, Roll Number and Email.");
+                    return;
+                  }
                   try {
                     const payload = {
                       name: form.name,
@@ -133,7 +138,7 @@ export default function TeacherStudents() {
                     setForm({ name: "", rollNumber: "", email: "", semester: 1, course: "B.Tech CSE", department: "Computer Science", gpa: 0, attendance: 0, totalMarks: 0, status: "Active" });
                   } catch (err) {
                     console.error("Failed to create student:", err);
-                    alert("Failed to create student. See console for details.");
+                    alert(err?.message || "Failed to create student. See console for details.");
                   }
                 }} className="btn-primary">Create Student</button>
               </div>

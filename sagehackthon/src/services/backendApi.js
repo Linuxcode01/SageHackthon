@@ -48,8 +48,12 @@ export async function createStudent(payload) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(`Failed to create student: ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = data && data.error ? data.error : `Failed to create student: ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
   } catch (err) {
     console.error("[API] createStudent error:", err);
     throw err;
@@ -91,6 +95,37 @@ export async function updateAssignment(assignmentId, data) {
     return await res.json();
   } catch (err) {
     console.error("[API] updateAssignment error:", err);
+    throw err;
+  }
+}
+
+// Chats / Logs
+export async function createChatLog(payload) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/chats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = data && data.error ? data.error : `Failed to create chat log: ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err) {
+    console.error("[API] createChatLog error:", err);
+    throw err;
+  }
+}
+
+export async function getChatsByStudent(studentId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/chats/student/${studentId}`);
+    if (!res.ok) throw new Error(`Failed to fetch chats: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("[API] getChatsByStudent error:", err);
     throw err;
   }
 }

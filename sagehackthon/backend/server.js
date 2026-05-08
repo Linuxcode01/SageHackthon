@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import studentRoutes from "./routes/studentRoutes.js";
 import resultRoutes from "./routes/resultRoutes.js";
 import assignmentRoutes from "./routes/assignmentRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ mongoose
 app.use("/api/students", studentRoutes);
 app.use("/api/results", resultRoutes);
 app.use("/api/assignments", assignmentRoutes);
+app.use("/api/chats", chatRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
